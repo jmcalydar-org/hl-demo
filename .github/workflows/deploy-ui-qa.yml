@@ -1,0 +1,49 @@
+name: Deploy UI to QA
+
+on:
+  push:
+    branches:
+      - qa
+    paths:
+      - 'hl-web/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy-qa:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::144776104140:role/hl-demo-github-actions-role
+          aws-region: us-east-1
+
+      - name: 3. Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 4. Install Dependencies
+        run: npm install
+        working-directory: ./hl-web
+
+      - name: 5. Build Angular App (using Production config)
+        run: npm run build -- --configuration=production
+        working-directory: ./hl-web
+
+      - name: 6. Deploy to S3 Bucket
+        run: |
+          aws s3 sync ./hl-web/dist/hl-web s3://hl-deals-web-qa --delete
+        
+      - name: 7. Invalidate CloudFront Cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id E1Q8JCR22M05P9 --paths /*
+
